@@ -1,0 +1,23 @@
+{
+  "name": "veda-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "next": "16.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "eslint": "9.39.2",
+    "eslint-config-next": "16.3.3",
+    "postcss": "8.5.6",
+    "tailwindcss": "4.3.3"
+  }
+}
