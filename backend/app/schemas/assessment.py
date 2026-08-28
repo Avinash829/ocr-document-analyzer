@@ -40,6 +40,7 @@ class MappingMethod(StrEnum):
     CONTINUATION = "CONTINUATION"
     SEMANTIC_MATCH = "SEMANTIC_MATCH"
     AI_DISAMBIGUATION = "AI_DISAMBIGUATION"
+    AI_VISION = "AI_VISION"
     AMBIGUOUS = "AMBIGUOUS"
     NONE = "NONE"
 
@@ -95,11 +96,17 @@ class Question(BaseModel):
     confidence: Confidence = 1.0
 
 
+class VisualElement(BaseModel):
+    type: str
+    description: str
+
+
 class Answer(BaseModel):
     id: str
     rawLabel: str | None = None
     normalizedLabel: str | None = None
     text: str
+    visualElements: list[VisualElement] = []
     regions: list[Region]
     pages: list[int]
     confidence: Confidence
@@ -130,6 +137,15 @@ class ProcessingState(BaseModel):
     progress: int | None = Field(default=None, ge=0, le=100)
     message: str
     degradedReasons: list[str] = []
+
+
+class GradingResult(BaseModel):
+    score: float
+    maxScore: float
+    isCorrect: bool
+    strengths: list[str]
+    advice: list[str]
+    feedback: str
 
 
 class AssessmentSummary(BaseModel):

@@ -2,7 +2,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
     env_file:
       - path: ./backend/.env
         required: false
@@ -16,7 +16,7 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: http://localhost:8001
     ports:
       - "3000:3000"
     depends_on:

@@ -23,6 +23,11 @@ def _token_similarity(question: str, answer: str) -> float:
     return min(1.0, 0.7 * overlap + 0.3 * sequence)
 
 
+def _is_gemini_answer(answer: Answer) -> bool:
+    """Check if this answer was produced by Gemini Vision."""
+    return any("Gemini Vision" in e for e in answer.evidence)
+
+
 def map_answers(questions: list[Question], answers: list[Answer], config: MappingConfig | None = None) -> list[Mapping]:
     config = config or MappingConfig()
     available = {answer.id: answer for answer in answers}
@@ -34,10 +39,13 @@ def map_answers(questions: list[Question], answers: list[Answer], config: Mappin
             answer = exact[0]
             answer.status = AnswerStatus.MATCHED
             available.pop(answer.id)
+            # Use AI_VISION method if answer came from Gemini
+            method = MappingMethod.AI_VISION if _is_gemini_answer(answer) else MappingMethod.EXPLICIT_LABEL
             result.append(Mapping(
                 questionId=question.id, answerId=answer.id, status=MappingStatus.ANSWERED,
-                confidence=max(0.9, answer.confidence), method=MappingMethod.EXPLICIT_LABEL,
-                evidence=[f"Detected answer label {answer.rawLabel or answer.normalizedLabel}"], regions=answer.regions,
+                confidence=max(0.9, answer.confidence), method=method,
+                evidence=answer.evidence if _is_gemini_answer(answer) else [f"Detected answer label {answer.rawLabel or answer.normalizedLabel}"],
+                regions=answer.regions,
             ))
             continue
         if len(exact) > 1:
@@ -79,4 +87,3 @@ def map_answers(questions: list[Question], answers: list[Answer], config: Mappin
                 evidence=["No answer met the configured mapping threshold"], regions=[],
             ))
     return result
-

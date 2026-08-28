@@ -1,6 +1,6 @@
+import re
 import uuid
 from dataclasses import dataclass
-import re
 
 from app.schemas.assessment import Answer, BoundingBox
 from app.services.ocr import OcrLine
@@ -21,17 +21,15 @@ class LabelAnchor:
 
 
 def _normalise_left_column_label(line: OcrLine, page_width: int) -> tuple[str | None, str]:
-    """Recognise labels only in the answer-number column.
-
-    OCR regularly reads the handwritten label `5.` as `S.`. That correction is
-    intentionally limited to a short, left-column label candidate; answer text
-    is never rewritten.
-    """
-    if line.bbox.x > page_width * 0.15:
+    """Recognise explicit answer labels, with narrow OCR corrections at the label."""
+    # Relaxed from 15% to 40% to account for wide handwritten margins or indented numbers
+    if line.bbox.x > page_width * 0.40:
         return None, ""
     raw, inline_text = label_prefix(line.text)
-    explicit_prefix_or_punctuation = re.match(r"^\s*(?:ans(?:wer)?|question|ques|q)\b", line.text, re.I) or re.match(r"^\s*\d{1,4}\s*(?:[.)。]|[-:]\s*[a-z]?(?:\s|$)|\([a-zivxlcdm]+\))", line.text, re.I)
-    if raw and explicit_prefix_or_punctuation:
+    explicit = re.match(r"^\s*(?:ans(?:wer)?|question|ques|q)\b", line.text, re.I) or re.match(
+        r"^\s*\d{1,4}\s*(?:[.)\u3002:]|[-\u2013]\s*[a-z]?(?:\s|$)|\([a-zivxlcdm]+\))", line.text, re.I
+    )
+    if raw and explicit:
         return raw, inline_text
     normalized = normalize_question_number(line.text)
     if normalized:
@@ -65,31 +63,31 @@ def _answers_for_page(page_number: int, page_width: int, page_height: int, lines
 
     answers: list[Answer] = []
     for anchor_index, anchor in enumerate(anchors):
-        upper = float("-inf") if anchor_index == 0 else (anchors[anchor_index - 1].center_y + anchor.center_y) / 2
+        # Exclude top-of-page noise by setting a max distance for the first anchor
+        if anchor_index == 0:
+            upper = anchor.line.bbox.y - (anchor.line.bbox.height * 2.5)
+        else:
+            upper = (anchors[anchor_index - 1].center_y + anchor.center_y) / 2
+            
         lower = float("inf") if anchor_index == len(anchors) - 1 else (anchor.center_y + anchors[anchor_index + 1].center_y) / 2
         content = [
             line for line_index, line in enumerate(ordered)
             if line_index not in anchor_lines
             and upper <= line.bbox.y + line.bbox.height / 2 < lower
-            and line.bbox.x >= anchor.line.bbox.x
+            # Allow text to be slightly left of the anchor in case of messy indentation
+            and line.bbox.x >= anchor.line.bbox.x - (page_width * 0.20)
         ]
         text_parts = [anchor.inline_text, *(line.text for line in content)]
-        text = "\n".join(part for part in text_parts if part).strip()
         region_lines = [anchor.line, *content]
         answers.append(Answer(
             id=f"a_{uuid.uuid4().hex[:12]}", rawLabel=anchor.raw, normalizedLabel=anchor.normalized,
-            text=text, regions=[_region_for_lines(page_number, region_lines, page_width, page_height)],
-            pages=[page_number], confidence=min(line.confidence for line in region_lines),
-            evidence=[f"OCR detected left-column label {anchor.raw}"],
+            text="\n".join(part for part in text_parts if part).strip(),
+            regions=[_region_for_lines(page_number, region_lines, page_width, page_height)], pages=[page_number],
+            confidence=min(line.confidence for line in region_lines), evidence=[f"OCR detected left-column label {anchor.raw}"],
         ))
     return answers
 
 
 def extract_answers(page_lines: list[tuple[int, int, int, list[OcrLine]]]) -> list[Answer]:
     """Segment labelled answers by layout bands rather than OCR iteration order."""
-    answers: list[Answer] = []
-    for page_number, page_width, page_height, lines in page_lines:
-        page_answers = _answers_for_page(page_number, page_width, page_height, lines)
-        if page_answers:
-            answers.extend(page_answers)
-    return answers
+    return [answer for page in page_lines for answer in _answers_for_page(*page)]

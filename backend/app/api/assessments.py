@@ -1,7 +1,8 @@
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
-from app.schemas.assessment import Assessment, JobResponse
+from app.schemas.assessment import Assessment, GradingResult, JobResponse
 from app.services.jobs import JobStore
 from app.utils.files import FileValidationError, validate_upload
 
@@ -49,4 +50,35 @@ def get_page(request: Request, assessment_id: str, document: str, page: int):
     if not path:
         raise HTTPException(status_code=404, detail={"code": "PAGE_NOT_FOUND", "message": "Document page not found."})
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
+
+
+class GradeRequest(BaseModel):
+    mappingId: str | None = None
+    questionId: str
+    answerId: str
+
+
+@router.post("/{assessment_id}/grade", response_model=GradingResult)
+def grade_answer(request: Request, assessment_id: str, payload: GradeRequest):
+    job = store(request).get(assessment_id)
+    if not job or not job.result:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Assessment not found or not ready."})
+    
+    question = next((q for q in job.result.questions if q.id == payload.questionId), None)
+    answer = next((a for a in job.result.answers if a.id == payload.answerId), None)
+    
+    if not question or not answer:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Question or answer not found in this assessment."})
+    
+    gemini = store(request)._gemini
+    if not gemini:
+        raise HTTPException(status_code=503, detail={"code": "AI_UNAVAILABLE", "message": "AI services are not configured."})
+        
+    from app.services.gemini_grader import grade_answer_with_gemini
+    
+    try:
+        result = grade_answer_with_gemini(gemini, question, answer)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"code": "GRADING_FAILED", "message": str(exc)})
 

@@ -3,6 +3,7 @@ from app.services.mapping import map_answers
 from app.services.answer_extractor import extract_answers
 from app.services.ocr import OcrLine
 from app.schemas.assessment import BoundingBox
+from app.services.question_extractor import extract_questions
 
 
 def question(identifier, number, order=0, text="Explain photosynthesis light energy chlorophyll"):
@@ -81,3 +82,21 @@ def test_ideographic_stop_label_splits_the_next_handwritten_answer():
     assert [item.normalizedLabel for item in answers] == ["20", "21"]
     assert answers[0].text == "B"
     assert answers[1].text.startswith("Supervised Learning")
+
+
+def test_question_parser_supports_q_number_with_marks_and_wrapped_text():
+    lines = [
+        OcrLine("Q1 (5 Marks)", .99, BoundingBox(x=20, y=100, width=100, height=20)),
+        OcrLine("Two taps A and B fill a tank.", .99, BoundingBox(x=20, y=125, width=250, height=20)),
+        OcrLine("Q2 (5 Marks)", .99, BoundingBox(x=20, y=200, width=100, height=20)),
+        OcrLine("A father and his son have x and y coins.", .99, BoundingBox(x=20, y=225, width=300, height=20)),
+    ]
+    questions = extract_questions([(1, 595, 842, lines)])
+    assert [(item.normalizedNumber, item.marks) for item in questions] == [("1", 5), ("2", 5)]
+    assert questions[0].text == "Two taps A and B fill a tank."
+
+
+def test_question_parser_supports_unbracketed_marks_after_a_dash():
+    line = OcrLine("Question No. 2 - 5 marks: Explain the method.", .99, BoundingBox(x=20, y=100, width=300, height=20))
+    question = extract_questions([(1, 595, 842, [line])])[0]
+    assert (question.normalizedNumber, question.marks, question.text) == ("2", 5, "Explain the method.")

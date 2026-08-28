@@ -12,11 +12,14 @@ from app.config import Settings
 from app.schemas.assessment import (
     ApiError, Assessment, AssessmentSummary, JobResponse, JobStage, ProcessingState,
 )
-from app.services.answer_extractor import extract_answers
 from app.services.documents import render_document
+from app.services.gemini import GeminiService, GeminiServiceError
+from app.services.gemini_answer_extractor import extract_answers_with_gemini
+from app.services.gemini_key_pool import GeminiKeyPool
+from app.services.gemini_mapper import map_answers_with_gemini
+from app.services.gemini_question_extractor import extract_questions_with_gemini
 from app.services.mapping import MappingConfig, map_answers
 from app.services.ocr import OcrUnavailableError, PaddleOcrService
-from app.services.question_extractor import extract_questions
 from app.utils.files import ValidatedUpload
 
 logger = logging.getLogger(__name__)
@@ -39,6 +42,25 @@ class JobStore:
         self._jobs: dict[str, Job] = {}
         self._lock = Lock()
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="assessment")
+
+        # Initialize Gemini service with key pool + model fallback
+        pool = GeminiKeyPool(cooldown_seconds=settings.gemini_key_cooldown_seconds)
+        self._gemini: GeminiService | None = None
+        if len(pool):
+            self._gemini = GeminiService(
+                pool=pool,
+                model=settings.gemini_model,
+                fallback_models=settings.gemini_fallback_models,
+                max_attempts=settings.gemini_max_attempts,
+                timeout_seconds=settings.gemini_timeout_seconds,
+            )
+            logger.info("gemini_initialized", extra={
+                "keys": len(pool),
+                "primary_model": settings.gemini_model,
+                "fallback_models": settings.gemini_fallback_models,
+            })
+        else:
+            logger.warning("gemini_unavailable: no API keys configured, using PaddleOCR only")
 
     def create(self, question_upload: ValidatedUpload, answer_upload: ValidatedUpload) -> Job:
         self.cleanup_expired()
@@ -70,24 +92,83 @@ class JobStore:
             shutil.rmtree(job.root, ignore_errors=True)
 
     def _process(self, job: Job, question_upload: ValidatedUpload, answer_upload: ValidatedUpload):
+        # --- Render documents to images ---
         self.update(job, JobStage.READING_QUESTION_PAPER, 10, "Rendering question paper")
         question_doc, question_assets = render_document(question_upload, job.root / "questions", f"/api/assessments/{job.id}/pages/questions")
         self.update(job, JobStage.READING_ANSWER_SHEET, 20, "Rendering answer sheet")
         answer_doc, answer_assets = render_document(answer_upload, job.root / "answers", f"/api/assessments/{job.id}/pages/answers")
-        self.update(job, JobStage.EXTRACTING_QUESTIONS, 30, "Extracting printed questions")
+
         degraded: list[str] = []
-        try:
-            question_lines = [(a.page, a.width, a.height, self.ocr.analyze(a.path)) for a in question_assets]
-            questions = extract_questions(question_lines)
-            self.update(job, JobStage.EXTRACTING_ANSWERS, 55, "Extracting answer regions")
-            answer_lines = [(a.page, a.width, a.height, self.ocr.analyze(a.path)) for a in answer_assets]
-            answers = extract_answers(answer_lines)
-        except OcrUnavailableError:
-            questions, answers = [], []
-            degraded.append("OCR_UNAVAILABLE")
-        self.update(job, JobStage.MAPPING_ANSWERS, 75, "Mapping answers to questions")
-        mappings = map_answers(questions, answers, MappingConfig(semantic_threshold=self.settings.ambiguous_threshold))
-        self.update(job, JobStage.VALIDATING_RESULTS, 90, "Validating coordinates and result")
+
+        # ===== STAGE 1: Extract questions =====
+        self.update(job, JobStage.EXTRACTING_QUESTIONS, 30, "Extracting questions with Gemini vision")
+        questions = []
+        used_gemini_questions = False
+        if self._gemini:
+            try:
+                page_images = [(a.page, a.path, a.width, a.height) for a in question_assets]
+                questions = extract_questions_with_gemini(self._gemini, page_images)
+                if questions:
+                    used_gemini_questions = True
+                else:
+                    degraded.append("AI_NO_QUESTIONS_DETECTED")
+            except GeminiServiceError as exc:
+                logger.warning("gemini_question_extraction_failed", extra={"assessment_id": job.id, "error": str(exc)})
+                degraded.append("AI_QUESTION_EXTRACTION_UNAVAILABLE")
+
+        if not used_gemini_questions:
+            try:
+                self.update(job, JobStage.EXTRACTING_QUESTIONS, 35, "Extracting questions with OCR (fallback)")
+                question_lines = [(a.page, a.width, a.height, self.ocr.analyze(a.path)) for a in question_assets]
+                from app.services.question_extractor import extract_questions
+                questions = extract_questions(question_lines)
+            except OcrUnavailableError:
+                questions = []
+                degraded.append("OCR_UNAVAILABLE")
+
+        # ===== STAGE 2: Extract answers =====
+        self.update(job, JobStage.EXTRACTING_ANSWERS, 55, "Identifying answers with Gemini vision")
+        answers = []
+        used_gemini_answers = False
+        if self._gemini and questions:
+            try:
+                page_images = [(a.page, a.path, a.width, a.height) for a in answer_assets]
+                answers = extract_answers_with_gemini(self._gemini, questions, page_images)
+                if answers:
+                    used_gemini_answers = True
+                else:
+                    degraded.append("AI_NO_ANSWERS_DETECTED")
+            except GeminiServiceError as exc:
+                logger.warning("gemini_answer_extraction_failed", extra={"assessment_id": job.id, "error": str(exc)})
+                degraded.append("AI_ANSWER_EXTRACTION_UNAVAILABLE")
+
+        if not used_gemini_answers:
+            try:
+                self.update(job, JobStage.EXTRACTING_ANSWERS, 55, "Extracting answers with OCR (fallback)")
+                answer_lines = [(a.page, a.width, a.height, self.ocr.analyze(a.path)) for a in answer_assets]
+                from app.services.answer_extractor import extract_answers
+                answers = extract_answers(answer_lines)
+            except OcrUnavailableError:
+                answers = []
+                if "OCR_UNAVAILABLE" not in degraded:
+                    degraded.append("OCR_UNAVAILABLE")
+
+        if not used_gemini_answers and not used_gemini_questions:
+            if "AI_VISION_UNAVAILABLE" not in degraded:
+                degraded.append("AI_VISION_UNAVAILABLE")
+
+        # ===== STAGE 3: Map answers to questions =====
+        self.update(job, JobStage.MAPPING_ANSWERS, 80, "Mapping answers with Gemini")
+        mappings = []
+        if self._gemini and questions:
+            try:
+                mappings = map_answers_with_gemini(self._gemini, questions, answers)
+            except GeminiServiceError as exc:
+                logger.warning("gemini_mapping_failed", extra={"assessment_id": job.id, "error": str(exc)})
+                degraded.append("AI_MAPPING_UNAVAILABLE")
+
+        # ===== STAGE 4: Finalize =====
+        self.update(job, JobStage.VALIDATING_RESULTS, 90, "Validating coordinates and results")
         unmatched = [answer for answer in answers if answer.status == "UNMATCHED"]
         summary = AssessmentSummary(
             totalQuestions=len(questions), answered=sum(m.status == "ANSWERED" for m in mappings),
@@ -95,7 +176,11 @@ class JobStore:
             ambiguous=sum(m.status == "AMBIGUOUS" for m in mappings), unmatchedAnswers=len(unmatched),
         )
         final_stage = JobStage.DEGRADED if degraded else JobStage.COMPLETED
-        processing = ProcessingState(stage=final_stage, progress=100, message="Assessment ready" if not degraded else "Assessment ready with limited extraction", degradedReasons=degraded)
+        processing = ProcessingState(
+            stage=final_stage, progress=100,
+            message="Assessment ready" if not degraded else "Assessment ready with limited extraction",
+            degradedReasons=degraded,
+        )
         job.result = Assessment(
             id=job.id, questionPaper=question_doc, answerSheet=answer_doc, questions=questions,
             answers=answers, mappings=mappings, unmatchedAnswers=unmatched, processing=processing, summary=summary,
