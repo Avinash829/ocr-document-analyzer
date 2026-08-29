@@ -1,14 +1,27 @@
-const STAGES = ["VALIDATING", "READING_QUESTION_PAPER", "EXTRACTING_QUESTIONS", "READING_ANSWER_SHEET", "EXTRACTING_ANSWERS", "MAPPING_ANSWERS", "VALIDATING_RESULTS", "FINALIZING"];
-
 export default function ProcessingPanel({ processing }) {
-  const active = Math.max(0, STAGES.indexOf(processing.stage));
   return (
-    <section className="mx-auto mt-24 max-w-lg rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl shadow-slate-200/50" aria-live="polite">
-      <div className="mx-auto mb-6 size-14 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" />
-      <h2 className="text-xl font-semibold text-slate-950">Analyzing assessment</h2>
-      <p className="mt-2 text-sm text-slate-600">{processing.message}</p>
-      {processing.progress != null && <div className="mt-7 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-600 transition-all" style={{ width: `${processing.progress}%` }} /></div>}
-      <div className="mt-3 flex justify-between text-xs text-slate-400"><span>{STAGES[active]?.replaceAll("_", " ")}</span><span>{processing.progress != null ? `${processing.progress}%` : ""}</span></div>
+    <section 
+      className="flex h-full w-full flex-col items-center justify-center bg-white px-4 sm:bg-transparent" 
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center text-center">
+        {/* Pulsing Loading Graphic */}
+        <div className="relative mb-[24px] h-[100px] w-[100px] sm:h-[120px] sm:w-[120px] animate-pulse">
+          <img 
+            src="/assets/loading.png" 
+            alt="Loading..." 
+            className="h-full w-full object-contain"
+          />
+        </div>
+
+        {/* Text content */}
+        <h2 className="text-[28px] sm:text-[34px] font-bold leading-none tracking-[-1.5px] text-[#272727]">
+          Extracting...
+        </h2>
+        <p className="mt-[8px] text-[15px] sm:text-[17px] font-normal leading-[22px] text-[#9CA3AF]">
+          This may take a while
+        </p>
+      </div>
     </section>
   );
 }
