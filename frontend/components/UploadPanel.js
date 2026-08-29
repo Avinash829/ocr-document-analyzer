@@ -19,31 +19,35 @@ export default function UploadPanel({ onSubmit, busy }) {
   const canStart = questionPaper && answerSheet && !busy;
 
   return (
-    <section className="mx-auto flex h-full w-full flex-col items-center px-4 pt-8 ">
+    <section className="mx-auto flex h-full w-full flex-col items-center px-4 pt-1 sm:pt-8">
       {/* Header */}
       <div className="w-full text-center">
-        <h2 className="flex items-center justify-center text-[34px] font-bold leading-none tracking-[-1.5px]">
-          <span className="text-[#272727]">
-            Upload
-          </span>
-
+        {/* Desktop Heading */}
+        <h2 className="hidden sm:flex items-center justify-center text-[34px] font-bold leading-none tracking-[-1.5px]">
+          <span className="text-[#272727]">Upload</span>
           <span className="ml-1 rounded-[7px] bg-[#f9e4da] px-[10px] py-[7px] text-[#f05f37]">
             Question Paper &amp; Answer Sheets
           </span>
         </h2>
 
-        <p className="mt-[9px] text-[17px] font-normal leading-[22px] text-[#303030]">
+        {/* Mobile Heading */}
+        <h2 className="sm:hidden text-center text-[22px] font-bold leading-tight tracking-tight text-[#272727]">
+          Upload Question Paper<br />
+          &amp; Answer Sheets
+        </h2>
+
+        <p className="mt-[2px] sm:mt-[9px] text-[15px] sm:text-[17px] font-normal leading-[22px] text-[#303030]">
           Upload both files to get started
         </p>
       </div>
 
       {/* Teacher Graphic */}
-      <div className="relative mt-[24px] h-[130px] w-[130px] shrink-0">
+      <div className="relative mt-[16px] sm:mt-[24px] h-[100px] w-[100px] sm:h-[130px] sm:w-[130px] shrink-0">
         {/* Teacher - BACK layer */}
         <img
           src="/assets/teacherlogo.png"
           alt="Teacher"
-          className="absolute left-1/2 top-1/2 z-10 h-[120px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover"
+          className="absolute left-1/2 top-1/2 z-10 h-[80px] w-[80px] sm:h-[120px] sm:w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-full object-cover"
         />
 
         {/* Rotating icons + circle - FRONT layer */}
@@ -51,19 +55,19 @@ export default function UploadPanel({ onSubmit, busy }) {
           src="/assets/iconsaroundteacherlogo.png"
           alt=""
           aria-hidden="true"
-          className="absolute left-1/2 top-1/2 z-20 h-[100px] w-[100px] -translate-x-1/2 -translate-y-1/2 object-contain opacity-90 animate-[spin_30s_linear_infinite]"
+          className="absolute left-1/2 top-1/2 z-20 h-[80px] w-[80px] sm:h-[100px] sm:w-[100px] -translate-x-1/2 -translate-y-1/2 object-contain opacity-90 animate-[spin_30s_linear_infinite]"
         />
       </div>
 
       {/* Upload Form */}
       <form
         onSubmit={submit}
-        className="mt-[18px] w-full max-w-[716px]"
+        className="mt-[16px] sm:mt-[18px] w-full max-w-[716px]"
       >
-        {/* Gray outer container */}
-        <div className="grid h-[181px] grid-cols-2 gap-[14px] rounded-[20px] bg-[#eeeeee] p-[10px]">
+        {/* Gray outer container: stacked on mobile, grid on desktop */}
+        <div className="flex flex-col sm:grid sm:h-[181px] sm:grid-cols-2 gap-[8px] sm:gap-[14px] rounded-[20px] bg-[#eeeeee] p-[8px] sm:p-[10px]">
           {/* Question Paper */}
-          <div className="h-[159px] overflow-hidden rounded-[16px] border-2 border-dashed border-[#d8d8d8] bg-white">
+          <div className="h-[110px] sm:h-[159px] overflow-hidden rounded-[16px] border-2 border-dashed border-[#d8d8d8] bg-white">
             <FilePicker
               id="question-paper"
               titlePrefix="Upload"
@@ -75,7 +79,7 @@ export default function UploadPanel({ onSubmit, busy }) {
           </div>
 
           {/* Answer Sheet */}
-          <div className="h-[159px] overflow-hidden rounded-[16px] border-2 border-dashed border-[#d8d8d8] bg-white">
+          <div className="h-[110px] sm:h-[159px] overflow-hidden rounded-[16px] border-2 border-dashed border-[#d8d8d8] bg-white">
             <FilePicker
               id="answer-sheet"
               titlePrefix="Upload"
@@ -88,7 +92,7 @@ export default function UploadPanel({ onSubmit, busy }) {
         </div>
 
         {/* Button + Footer */}
-        <div className="mt-[32px] flex flex-col items-center">
+        <div className="mt-[24px] sm:mt-[32px] flex flex-col items-center">
           <button
             type="submit"
             disabled={!canStart}

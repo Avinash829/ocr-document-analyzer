@@ -20,7 +20,7 @@ export default function LayoutShell({ children }) {
         <div className="hidden lg:block rounded-2xl overflow-hidden bg-white shadow-sm">
           <Header onMenuClick={() => setIsSidebarOpen(true)} />
         </div>
-        <div className="lg:hidden">
+        <div className="lg:hidden m-4 mb-0 rounded-3xl overflow-hidden bg-white shadow-sm">
           <Header onMenuClick={() => setIsSidebarOpen(true)} />
         </div>
         <main className="flex-1 overflow-y-auto ">
