@@ -7,8 +7,14 @@ export default function Header({ onMenuClick }) {
   return (
     <header className="flex h-[72px] items-center justify-between bg-white px-4 border-b border-slate-200 lg:border-none lg:px-8">
       {/* Mobile Left: Logo */}
-      <div className="flex items-center gap-2 lg:hidden">
-        <img src="/assets/logo.png" alt="VedaAI Logo" className="h-7 w-auto object-contain" />
+      <div className="flex items-center gap-3 lg:hidden">
+        <button className="text-slate-800 hover:text-black">
+          <ArrowLeft size={22} />
+        </button>
+        <div className="flex items-center gap-2">
+          <img src="/assets/logo.png" alt="Veda Icon" className="h-6 w-auto object-contain" />
+          <img src="/assets/vedaaitext.png" alt="VedaAI Text" className="h-4 w-auto object-contain" />
+        </div>
       </div>
 
       {/* Desktop Left: Breadcrumbs */}
@@ -33,7 +39,7 @@ export default function Header({ onMenuClick }) {
         </button>
 
         {/* AI Symbol */}
-        <button className="flex items-center justify-center hover:opacity-80 transition-opacity">
+        <button className="hidden lg:flex items-center justify-center hover:opacity-80 transition-opacity">
           <img src="/assets/headerailogo.png" alt="AI Features" className="h-[22px] w-[22px] object-contain" />
         </button>
 

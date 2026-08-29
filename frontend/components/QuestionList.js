@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 export default function QuestionList({ questions, mappings, selectedId, onSelect, assessmentId }) {
@@ -8,103 +8,122 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
   const [grades, setGrades] = useState({});
   const [loadingGrades, setLoadingGrades] = useState({});
 
-  const handleSelect = async (questionId) => {
-    onSelect(questionId);
-    
-    // Fetch grade if answered and not already fetched
-    const mapping = byQuestion.get(questionId);
-    if (mapping?.status === "ANSWERED" && !grades[questionId] && !loadingGrades[questionId] && assessmentId) {
-      setLoadingGrades(prev => ({ ...prev, [questionId]: true }));
-      try {
-        const res = await fetch(`/api/assessments/${assessmentId}/grade`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mappingId: mapping.id,
-            questionId: questionId,
-            answerId: mapping.answerId
-          })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setGrades(prev => ({ ...prev, [questionId]: data }));
-        }
-      } catch (err) {
-        console.error("Failed to fetch grade", err);
-      } finally {
-        setLoadingGrades(prev => ({ ...prev, [questionId]: false }));
+  useEffect(() => {
+    if (selectedId && assessmentId) {
+      const mapping = byQuestion.get(selectedId);
+      if (mapping?.status === "ANSWERED" && !grades[selectedId] && !loadingGrades[selectedId]) {
+        fetchGrade(selectedId, mapping);
       }
+    }
+  }, [selectedId, assessmentId]);
+
+  const fetchGrade = async (qId, mapping) => {
+    setLoadingGrades(prev => ({ ...prev, [qId]: true }));
+    try {
+      const res = await fetch(`/api/assessments/${assessmentId}/grade`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mappingId: mapping.id,
+          questionId: qId,
+          answerId: mapping.answerId
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGrades(prev => ({ ...prev, [qId]: data }));
+      }
+    } catch (err) {
+      console.error("Failed to fetch grade", err);
+    } finally {
+      setLoadingGrades(prev => ({ ...prev, [qId]: false }));
     }
   };
 
+  const handleSelect = (questionId) => {
+    onSelect(questionId);
+    // Grade fetching is now handled by the useEffect above
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto bg-white p-4 lg:p-6">
+    <div className="flex-1 overflow-y-auto bg-transparent p-2 sm:p-4 lg:p-6">
       {questions.length === 0 && (
         <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
           No questions could be extracted. Check the degraded status or try a clearer scan.
         </p>
       )}
-      
+
       <div className="space-y-0">
         {questions.map((question) => {
           const mapping = byQuestion.get(question.id);
           const isSelected = selectedId === question.id;
           const grade = grades[question.id];
           const isLoading = loadingGrades[question.id];
-          
+
           let scoreText = mapping?.status;
+          let scoreBg = "bg-slate-100";
           let scoreColor = "text-slate-500";
+
           if (mapping?.status === "ANSWERED") scoreText = isLoading ? "..." : (grade ? `${grade.score}/${grade.maxScore}` : "ANSWERED");
           if (grade) {
-            scoreColor = grade.isCorrect ? "text-[#1DB335]" : "text-[#EA643A]";
+            if (grade.isCorrect) {
+              scoreBg = "bg-[#E6F6E9]";
+              scoreColor = "text-[#1DB335]";
+            } else {
+              scoreBg = "bg-[#FCECE8]";
+              scoreColor = "text-[#EA643A]";
+            }
           } else if (mapping?.status === "ANSWERED") {
+            scoreBg = "bg-[#E6F6E9]";
             scoreColor = "text-[#1DB335]";
           }
 
           return (
-            <div key={question.id} className={`group flex flex-col transition-all duration-200 ${isSelected ? "my-3" : ""}`}>
-              <button
+            <div key={question.id} className={`group flex flex-col transition-all duration-200 mb-3`}>
+              <div
                 onClick={() => handleSelect(question.id)}
-                className={`flex w-full items-start gap-4 p-4 text-left transition-all ${
-                  isSelected 
-                    ? "rounded-2xl border-2 border-[#EA643A] bg-white shadow-[0_4px_20px_-4px_rgba(234,100,58,0.15)]" 
-                    : "border-b border-slate-100 bg-white hover:bg-slate-50"
-                }`}
+                role="button"
+                tabIndex={0}
+                className={`flex w-full flex-col p-4 sm:p-5 text-left cursor-pointer transition-all ${isSelected
+                  ? "rounded-2xl border-2 border-[#EA643A] bg-white shadow-md z-10 relative"
+                  : "rounded-2xl bg-white shadow-sm border border-slate-100 hover:shadow-md"
+                  }`}
               >
-                {/* Number Circle */}
-                <div className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-bold text-white transition-colors ${
-                  isSelected ? "bg-[#EA643A]" : "bg-slate-600"
-                }`}>
-                  {question.displayNumber}
-                </div>
-                
-                {/* Text Content */}
-                <div className="flex-1">
-                  <p className={`text-[15px] leading-relaxed transition-colors ${isSelected ? "text-slate-900 font-medium" : "text-slate-700 line-clamp-2"}`}>
-                    {question.text}
-                  </p>
-                  
-                  {/* Expanded AI Feedback */}
-                  {isSelected && grade && (
-                    <div className="mt-4 rounded-xl bg-[#F8F9FA] p-4 text-left">
-                      <p className="text-[13px] font-bold text-slate-900">AI Feedback</p>
-                      <p className="mt-1 text-[14px] leading-relaxed text-slate-700">{grade.feedback}</p>
+                {/* Top Row: Number, Score & Chevron */}
+                <div className="flex w-full items-center justify-between mb-3 sm:mb-4">
+                  {/* Number Circle */}
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#515151] text-[14px] font-bold text-white shadow-sm">
+                    {question.displayNumber}
+                  </div>
+
+                  {/* Score & Chevron */}
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <span className={`px-3 py-1 rounded-full text-[13px] sm:text-[14px] font-bold ${scoreBg} ${scoreColor}`}>
+                      {scoreText}
+                    </span>
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F5F6F8]">
+                      {isSelected ? (
+                        <ChevronUp size={18} className="text-slate-600 shrink-0" />
+                      ) : (
+                        <ChevronDown size={18} className="text-slate-600 shrink-0" />
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
-                {/* Score & Chevron */}
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className={`text-[15px] font-bold ${scoreColor}`}>
-                    {scoreText}
-                  </span>
-                  {isSelected ? (
-                    <ChevronUp size={20} className="text-slate-400" />
-                  ) : (
-                    <ChevronDown size={20} className="text-slate-300 group-hover:text-slate-500" />
-                  )}
-                </div>
-              </button>
+                {/* Text Content */}
+                <p className={`text-[14px] sm:text-[15px] leading-relaxed transition-colors ${isSelected ? "text-slate-900" : "text-slate-700 line-clamp-2 sm:line-clamp-none"}`}>
+                  {question.text}
+                </p>
+
+                {/* Expanded AI Feedback */}
+                {isSelected && grade && (
+                  <div className="mt-4 rounded-xl bg-[#F8F9FA] p-4 text-left border border-slate-50">
+                    <p className="text-[14px] font-bold text-slate-900">AI Feedback</p>
+                    <p className="mt-2 text-[14px] leading-relaxed text-slate-700">{grade.feedback}</p>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}

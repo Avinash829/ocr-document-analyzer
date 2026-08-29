@@ -1,11 +1,13 @@
 from functools import lru_cache
+from dotenv import load_dotenv
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+load_dotenv()
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=None, extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     allowed_origins: str = "http://localhost:3000"
     max_file_size_mb: int = Field(default=25, ge=1, le=200)
