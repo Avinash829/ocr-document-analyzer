@@ -19,7 +19,7 @@ export default function ReportModal({ isOpen, onClose, totalScore, maxScore, fee
       />
       
       {/* Modal */}
-      <div className="relative w-full max-w-md transform overflow-hidden rounded-3xl bg-white p-6 sm:p-8 shadow-2xl transition-all">
+      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto transform rounded-3xl bg-white p-6 sm:p-8 shadow-2xl transition-all">
         <button 
           onClick={onClose}
           className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"

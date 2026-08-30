@@ -56,10 +56,40 @@ export default function QuestionList({ questions, unmatchedAnswers, mappings, se
 
   const handleOpenReport = async () => {
     setIsReportModalOpen(true);
-    if (!reportFeedback && !isGeneratingReport) {
+    let currentGrades = { ...grades };
+    
+    // Find all questions that are answered but not yet graded
+    const missingGrades = questions.filter(q => {
+      const mapping = byQuestion.get(q.id);
+      return mapping?.status === "ANSWERED" && !grades[q.id];
+    });
+
+    if (missingGrades.length > 0) {
       setIsGeneratingReport(true);
+      setReportFeedback(`Auto-grading ${missingGrades.length} remaining answers...`);
+      
+      // Fetch missing grades
+      await Promise.all(missingGrades.map(async (q) => {
+        const mapping = byQuestion.get(q.id);
+        try {
+          const data = await gradeAnswer(assessmentId, {
+            mappingId: mapping.id,
+            questionId: q.id,
+            answerId: mapping.answerId
+          });
+          currentGrades[q.id] = data;
+          setGrades(prev => ({ ...prev, [q.id]: data }));
+        } catch (err) {
+          console.error("Failed auto-grading", err);
+        }
+      }));
+    }
+
+    if (!reportFeedback || missingGrades.length > 0) {
+      setIsGeneratingReport(true);
+      setReportFeedback("Generating AI performance summary...");
       try {
-        const data = await generateReport(assessmentId, grades);
+        const data = await generateReport(assessmentId, currentGrades);
         setReportFeedback(data.overallFeedback);
       } catch (err) {
         console.error("Failed to generate report", err);
