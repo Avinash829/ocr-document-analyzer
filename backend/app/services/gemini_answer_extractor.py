@@ -137,8 +137,8 @@ Return ONLY valid JSON matching the schema.
 def _build_questions_block(questions: list[Question]) -> str:
     lines: list[str] = []
     for q in sorted(questions, key=lambda q: q.order):
-        text_preview = q.text[:300].replace("\n", " ")
-        lines.append(f"  Q{q.normalizedNumber}: {text_preview}")
+        text_preview = q.text[:250].replace("\n", " ")
+        lines.append(f"  Q{q.displayNumber}: {text_preview}")
     return "\n".join(lines)
 
 
@@ -149,32 +149,11 @@ def extract_answers_with_gemini(
     questions: list[Question],
     page_images: list[tuple[int, Path, int, int]],
 ) -> list[Answer]:
-    """Extract answers with one bounded Gemini Vision request per page.
-
-    Parameters
-    ----------
-    gemini : GeminiService
-        Configured Gemini client with key pool.
-    questions : list[Question]
-        All questions extracted from the question paper.
-    page_images : list[tuple[int, Path, int, int]]
-        Each entry is ``(page_number, image_path, page_width, page_height)``.
-
-    Returns
-    -------
-    list[Answer]
-        Answer objects ready for the mapping stage.
-
-    Raises
-    ------
-    GeminiServiceError
-        When all Gemini keys are exhausted or the request fails.
-    """
     if not questions or not page_images:
         return []
 
-    references = ", ".join(f"Q{question.normalizedNumber}" for question in questions)
-    prompt = _PROMPT_TEMPLATE.format(questions_block=f"Valid question references: {references}")
+    questions_block = _build_questions_block(questions)
+    prompt = _PROMPT_TEMPLATE.format(questions_block=questions_block)
 
     def extract_page(page_image: tuple[int, Path, int, int]) -> tuple[tuple[int, Path, int, int], GeminiAnswerResponse]:
         page_number, image_path, _width, _height = page_image

@@ -164,11 +164,13 @@ def extract_questions_with_gemini(
                 bbox.width = max(1, page_width - bbox.x)
             if bbox.y + bbox.height > page_height:
                 bbox.height = max(1, page_height - bbox.y)
-            normalized = item.number.strip()
+            from app.utils.normalization import normalize_question_number
+            raw_number = item.number.strip()
+            normalized = normalize_question_number(raw_number) or raw_number
 
             all_questions.append(Question(
                 id=f"q_{uuid.uuid4().hex[:12]}",
-                displayNumber=item.number,
+                displayNumber=raw_number,
                 normalizedNumber=normalized,
                 text=item.text.strip(),
                 page=original_page_num,

@@ -133,6 +133,7 @@ temp_files/
 temporary/
 cache/
 caches/
+demo/
 
 *.tmp
 *.temp

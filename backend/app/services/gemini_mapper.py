@@ -33,12 +33,12 @@ logger = logging.getLogger(__name__)
 
 class GeminiMappingItem(BaseModel):
     """One question-to-answer mapping produced by Gemini."""
-    question_number: str = Field(
-        description="The question number being mapped (e.g. '1', '2', '3(a)')."
+    question_id: str = Field(
+        description="The exact 'id' or label of the question being mapped (e.g. 'q_12345' or '1')."
     )
     answer_id: str | None = Field(
         default=None,
-        description="The ID of the matched answer, or null if the question is unanswered."
+        description="The exact 'id' of the matched answer (e.g. 'a_67890'), or null if unanswered."
     )
     status: str = Field(
         description="One of: 'ANSWERED', 'UNANSWERED', 'AMBIGUOUS'."
@@ -63,25 +63,22 @@ class GeminiMappingResponse(BaseModel):
 # ── Prompt ───────────────────────────────────────────────────────────────
 
 _PROMPT_TEMPLATE = """\
-You are mapping student answers to exam questions.
+You are an expert educational grading system. Your task is to map extracted student answers to the correct printed questions.
 
-**Questions:**
+**Questions from Question Paper:**
 {questions_block}
 
-**Extracted Answers:**
+**Extracted Answers from Answer Sheet:**
 {answers_block}
 
 **Rules:**
-1. For each question, find the best matching answer from the list above.
-2. Match by answer label first (e.g., answer with rawLabel "2" matches question "2").
-3. If labels don't match or are missing ("No Label"), use semantic content matching — \
-compare the answer text to the question text to find the best match.
-4. Each answer can only be matched to ONE question. Don't reuse answers.
+1. Examine each question and find the student answer that best corresponds to it.
+2. Primary matching: Use student label / rawLabel first (e.g., Student Label "Q1" or "1" maps to Question Label "1" or "Q1").
+3. Semantic matching: If labels are missing ("No Label"), incorrect, or ambiguous, compare the text of the student answer to the text of the question to find the true semantic match.
+4. Each answer can only be matched to ONE question. Don't reuse answers across multiple questions.
 5. If a question has no matching answer at all, set status to "UNANSWERED" and answer_id to null.
-6. If multiple answers could match a question and you're not sure, set status to "AMBIGUOUS".
-7. Set confidence based on how certain you are about the match.
-8. Provide brief reasoning for each mapping decision.
-9. Return one mapping entry for EVERY question, even unanswered ones.
+6. Set confidence based on how certain you are about the match.
+7. Return one mapping entry for EVERY question listed above, using its exact question `id`.
 
 Return ONLY valid JSON matching the schema.
 """
@@ -91,7 +88,7 @@ def _build_questions_block(questions: list[Question]) -> str:
     lines: list[str] = []
     for q in sorted(questions, key=lambda q: q.order):
         text_preview = q.text[:300].replace("\n", " ")
-        lines.append(f"  Q{q.normalizedNumber} (id={q.id}): {text_preview}")
+        lines.append(f"  Question id='{q.id}' [Label: Q{q.displayNumber}]: {text_preview}")
     return "\n".join(lines)
 
 
@@ -101,7 +98,7 @@ def _build_answers_block(answers: list[Answer]) -> str:
         label = a.rawLabel or "No Label"
         text_preview = a.text[:300].replace("\n", " ")
         pages = ", ".join(str(p) for p in a.pages)
-        lines.append(f"  Answer id={a.id} [label: {label}] [pages: {pages}]: {text_preview}")
+        lines.append(f"  Answer id='{a.id}' [Student Label: {label}] [Page {pages}]: {text_preview}")
     return "\n".join(lines)
 
 
@@ -112,27 +109,6 @@ def map_answers_with_gemini(
     questions: list[Question],
     answers: list[Answer],
 ) -> list[Mapping]:
-    """Map answers to questions using Gemini's semantic understanding.
-
-    Parameters
-    ----------
-    gemini : GeminiService
-        Configured Gemini client.
-    questions : list[Question]
-        All extracted questions.
-    answers : list[Answer]
-        All extracted answers.
-
-    Returns
-    -------
-    list[Mapping]
-        One mapping per question.
-
-    Raises
-    ------
-    GeminiServiceError
-        When Gemini is unavailable.
-    """
     if not questions:
         return []
 
@@ -149,22 +125,37 @@ def map_answers_with_gemini(
         schema=GeminiMappingResponse,
     )
 
-    # Build lookup maps
-    question_map = {q.normalizedNumber: q for q in questions}
+    # Build multi-index question lookup
+    question_lookup: dict[str, Question] = {}
+    for q in questions:
+        question_lookup[q.id] = q
+        question_lookup[q.displayNumber] = q
+        question_lookup[q.normalizedNumber] = q
+        norm = normalize_question_number(q.displayNumber)
+        if norm:
+            question_lookup[norm] = q
+        clean_disp = q.displayNumber.lstrip("Qq").strip(". ")
+        if clean_disp:
+            question_lookup[clean_disp] = q
+            question_lookup[f"Q{clean_disp}"] = q
+
     answer_map = {a.id: a for a in answers}
     used_answer_ids: set[str] = set()
     result: list[Mapping] = []
 
     for item in response.mappings:
-        normalized_number = normalize_question_number(item.question_number) or item.question_number.strip()
-        question = question_map.get(normalized_number)
+        q_identifier = item.question_id.strip()
+        question = question_lookup.get(q_identifier)
         if not question:
-            # Try to find by display number
-            question = next(
-                (q for q in questions if q.displayNumber == item.question_number),
-                None,
-            )
+            norm_id = normalize_question_number(q_identifier)
+            if norm_id:
+                question = question_lookup.get(norm_id)
         if not question:
+            clean_q = q_identifier.lstrip("Qq").strip(". ")
+            question = question_lookup.get(clean_q)
+
+        if not question:
+            logger.warning(f"Could not resolve mapped question: {q_identifier}")
             continue
 
         status_str = item.status.upper()
@@ -215,7 +206,7 @@ def map_answers_with_gemini(
                 regions=[],
             ))
 
-    # Handle any questions that Gemini missed in its response
+    # Handle any questions missed in Gemini response
     mapped_question_ids = {m.questionId for m in result}
     for question in questions:
         if question.id not in mapped_question_ids:
@@ -228,6 +219,38 @@ def map_answers_with_gemini(
                 evidence=["Question not included in AI mapping response"],
                 regions=[],
             ))
+
+    # Deterministic Fallback: For any unanswered question, check if there is an unused answer with matching label
+    for m in result:
+        if m.status == MappingStatus.UNANSWERED:
+            question = next((q for q in questions if q.id == m.questionId), None)
+            if not question:
+                continue
+
+            matching_answer = None
+            q_norm = question.normalizedNumber or normalize_question_number(question.displayNumber)
+            q_disp = question.displayNumber.lstrip("Qq").strip(". ")
+
+            for a in answers:
+                if a.id in used_answer_ids:
+                    continue
+                a_label = (a.rawLabel or "").strip()
+                a_norm = a.normalizedLabel or normalize_question_number(a_label)
+                a_clean = a_label.lstrip("Qq").strip(". ")
+
+                if (q_norm and a_norm and q_norm == a_norm) or (q_disp and a_clean and q_disp == a_clean):
+                    matching_answer = a
+                    break
+
+            if matching_answer:
+                matching_answer.status = AnswerStatus.MATCHED
+                used_answer_ids.add(matching_answer.id)
+                m.answerId = matching_answer.id
+                m.status = MappingStatus.ANSWERED
+                m.confidence = 0.95
+                m.method = MappingMethod.EXPLICIT_LABEL
+                m.evidence = [f"Deterministic label match: {matching_answer.rawLabel} -> Q{question.displayNumber}"]
+                m.regions = matching_answer.regions
 
     logger.info(
         "gemini_mapping_complete",
