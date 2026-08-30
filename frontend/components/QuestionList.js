@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { gradeAnswer } from "../lib/api";
 
-export default function QuestionList({ questions, mappings, selectedId, onSelect, assessmentId }) {
+export default function QuestionList({ questions, mappings, selectedId, onSelect, assessmentId, expandAll }) {
   const byQuestion = new Map(mappings.map((mapping) => [mapping.questionId, mapping]));
   const [grades, setGrades] = useState({});
   const [loadingGrades, setLoadingGrades] = useState({});
@@ -17,22 +18,26 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
     }
   }, [selectedId, assessmentId]);
 
+  useEffect(() => {
+    if (expandAll && assessmentId) {
+      questions.forEach((question) => {
+        const mapping = byQuestion.get(question.id);
+        if (mapping?.status === "ANSWERED" && !grades[question.id] && !loadingGrades[question.id]) {
+          fetchGrade(question.id, mapping);
+        }
+      });
+    }
+  }, [expandAll, assessmentId, questions, grades, loadingGrades]);
+
   const fetchGrade = async (qId, mapping) => {
     setLoadingGrades(prev => ({ ...prev, [qId]: true }));
     try {
-      const res = await fetch(`/api/assessments/${assessmentId}/grade`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mappingId: mapping.id,
-          questionId: qId,
-          answerId: mapping.answerId
-        })
+      const data = await gradeAnswer(assessmentId, {
+        mappingId: mapping.id,
+        questionId: qId,
+        answerId: mapping.answerId
       });
-      if (res.ok) {
-        const data = await res.json();
-        setGrades(prev => ({ ...prev, [qId]: data }));
-      }
+      setGrades(prev => ({ ...prev, [qId]: data }));
     } catch (err) {
       console.error("Failed to fetch grade", err);
     } finally {
@@ -57,6 +62,7 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
         {questions.map((question) => {
           const mapping = byQuestion.get(question.id);
           const isSelected = selectedId === question.id;
+          const isExpanded = isSelected || expandAll;
           const grade = grades[question.id];
           const isLoading = loadingGrades[question.id];
 
@@ -102,7 +108,7 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
                       {scoreText}
                     </span>
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F5F6F8]">
-                      {isSelected ? (
+                      {isExpanded ? (
                         <ChevronUp size={18} className="text-slate-600 shrink-0" />
                       ) : (
                         <ChevronDown size={18} className="text-slate-600 shrink-0" />
@@ -117,7 +123,7 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
                 </p>
 
                 {/* Expanded AI Feedback */}
-                {isSelected && grade && (
+                {isExpanded && grade && (
                   <div className="mt-4 rounded-xl bg-[#F8F9FA] p-4 text-left border border-slate-50">
                     <p className="text-[14px] font-bold text-slate-900">AI Feedback</p>
                     <p className="mt-2 text-[14px] leading-relaxed text-slate-700">{grade.feedback}</p>

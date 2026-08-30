@@ -57,7 +57,7 @@ Max Marks: {max_marks}
 2. Determine a fair score based on the max marks provided. Do not exceed max marks. If max marks is 0, give a score of 0.
 3. List 1-3 specific strengths of their answer.
 4. List 1-3 specific areas of improvement or missing concepts (advice).
-5. Provide a constructive, encouraging overall feedback paragraph.
+5. Provide a constructive, encouraging single-line overall feedback summary. If this is an optional question (max marks is 0), keep the feedback extremely brief.
 6. Set isCorrect to true if the answer demonstrates sufficient understanding, even if minor details are missing.
 
 Return ONLY valid JSON matching the schema.

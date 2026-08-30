@@ -7,6 +7,7 @@ import QuestionList from "./QuestionList";
 export default function ResultsWorkspace({ result, onReset }) {
   const [selectedId, setSelectedId] = useState(result.questions[0]?.id || null);
   const [mobileTab, setMobileTab] = useState("Questions"); // "Questions" or "Answer Sheet"
+  const [expandAll, setExpandAll] = useState(false);
 
   const mapping = result.mappings.find((item) => item.questionId === selectedId);
   const question = result.questions.find((item) => item.id === selectedId);
@@ -45,13 +46,15 @@ export default function ResultsWorkspace({ result, onReset }) {
         <div className={`flex w-full flex-col overflow-hidden rounded-[20px] sm:rounded-3xl bg-white shadow-sm lg:w-[420px] ${mobileTab === "Questions" ? "flex flex-1" : "hidden lg:flex"}`}>
           <div className="flex items-center justify-between border-b border-slate-100 px-4 sm:px-6 py-4">
             <h2 className="text-[15px] font-bold text-slate-900">
-              Extracted Questions <span className="block sm:inline text-slate-500 font-normal">(from question paper)</span>
+              Extracted Questions <span className="text-slate-500 font-normal">(from question paper)</span>
             </h2>
-            <button className="hidden sm:block rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-              Expand All
+            <button 
+              onClick={() => setExpandAll(!expandAll)}
+              className="hidden sm:block rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+              {expandAll ? "Collapse All" : "Expand All"}
             </button>
           </div>
-          <QuestionList questions={result.questions} mappings={result.mappings} selectedId={selectedId} onSelect={setSelectedId} assessmentId={result.id} />
+          <QuestionList questions={result.questions} mappings={result.mappings} selectedId={selectedId} onSelect={setSelectedId} assessmentId={result.id} expandAll={expandAll} />
         </div>
 
         {/* Answer Sheet Panel */}

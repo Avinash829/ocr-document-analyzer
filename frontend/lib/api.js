@@ -23,3 +23,9 @@ export function createAssessment(questionPaper, answerSheet) {
 
 export const getJob = (id) => request(`/api/assessments/${id}`, { cache: "no-store" });
 export const getResult = (id) => request(`/api/assessments/${id}/result`, { cache: "no-store" });
+
+export const gradeAnswer = (assessmentId, payload) => request(`/api/assessments/${assessmentId}/grade`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload)
+});
