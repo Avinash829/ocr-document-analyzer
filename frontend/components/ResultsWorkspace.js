@@ -54,7 +54,7 @@ export default function ResultsWorkspace({ result, onReset }) {
               {expandAll ? "Collapse All" : "Expand All"}
             </button>
           </div>
-          <QuestionList questions={result.questions} mappings={result.mappings} selectedId={selectedId} onSelect={setSelectedId} assessmentId={result.id} expandAll={expandAll} />
+          <QuestionList questions={result.questions} mappings={result.mappings} selectedId={selectedId} onSelect={setSelectedId} assessmentId={result.id} expandAll={expandAll} onReset={onReset} />
         </div>
 
         {/* Answer Sheet Panel */}

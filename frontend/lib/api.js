@@ -29,3 +29,9 @@ export const gradeAnswer = (assessmentId, payload) => request(`/api/assessments/
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(payload)
 });
+
+export const generateReport = (assessmentId, grades) => request(`/api/assessments/${assessmentId}/report`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ grades })
+});

@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { gradeAnswer } from "../lib/api";
+import { gradeAnswer, generateReport } from "../lib/api";
+import ReportModal from "./ReportModal";
 
-export default function QuestionList({ questions, mappings, selectedId, onSelect, assessmentId, expandAll }) {
+export default function QuestionList({ questions, mappings, selectedId, onSelect, assessmentId, expandAll, onReset }) {
   const byQuestion = new Map(mappings.map((mapping) => [mapping.questionId, mapping]));
   const [grades, setGrades] = useState({});
   const [loadingGrades, setLoadingGrades] = useState({});
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportFeedback, setReportFeedback] = useState("");
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   useEffect(() => {
     if (selectedId && assessmentId) {
@@ -49,6 +53,33 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
     onSelect(questionId);
     // Grade fetching is now handled by the useEffect above
   };
+
+  const handleOpenReport = async () => {
+    setIsReportModalOpen(true);
+    if (!reportFeedback && !isGeneratingReport) {
+      setIsGeneratingReport(true);
+      try {
+        const data = await generateReport(assessmentId, grades);
+        setReportFeedback(data.overallFeedback);
+      } catch (err) {
+        console.error("Failed to generate report", err);
+        setReportFeedback("Failed to generate AI performance summary.");
+      } finally {
+        setIsGeneratingReport(false);
+      }
+    }
+  };
+
+  let totalScore = 0;
+  let maxScore = 0;
+  
+  questions.forEach(q => {
+    maxScore += parseFloat(q.marks || 1); // Sum all possible marks
+  });
+
+  Object.values(grades).forEach(grade => {
+    totalScore += grade.score || 0;
+  });
 
   return (
     <div className="flex-1 overflow-y-auto bg-transparent p-2 sm:p-4 lg:p-6">
@@ -134,6 +165,27 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
           );
         })}
       </div>
+      
+      {/* View Final Report Button */}
+      <div className="mt-8 mb-4 px-2">
+        <button
+          onClick={handleOpenReport}
+          className="w-full rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 py-4 font-bold text-white shadow-xl shadow-slate-900/20 hover:scale-[1.02] hover:shadow-2xl transition-all cursor-pointer"
+        >
+          View Final Report
+        </button>
+      </div>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        totalScore={totalScore}
+        maxScore={maxScore}
+        feedback={reportFeedback}
+        isLoading={isGeneratingReport}
+        onReset={onReset}
+      />
     </div>
   );
 }

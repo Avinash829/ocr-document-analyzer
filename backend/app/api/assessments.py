@@ -58,6 +58,42 @@ class GradeRequest(BaseModel):
     answerId: str
 
 
+class ReportRequest(BaseModel):
+    grades: dict
+
+
+@router.post("/{assessment_id}/report")
+def generate_report(request: Request, assessment_id: str, payload: ReportRequest):
+    job = store(request).get(assessment_id)
+    if not job or not job.result:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "Assessment not found or not ready."})
+    
+    gemini = store(request)._gemini
+    if not gemini:
+        raise HTTPException(status_code=503, detail={"code": "AI_UNAVAILABLE", "message": "AI services are not configured."})
+        
+    performance_lines = []
+    for q in job.result.questions:
+        if q.id in payload.grades:
+            grade_info = payload.grades[q.id]
+            score = grade_info.get("score", 0)
+            max_score = grade_info.get("maxScore", 0)
+            feedback = grade_info.get("feedback", "")
+            performance_lines.append(f"Q: {q.text} | Score: {score}/{max_score} | Feedback: {feedback}")
+    
+    performance_data = "\n".join(performance_lines)
+    if not performance_data:
+        return {"overallFeedback": "No graded answers found to generate a report."}
+        
+    from app.services.gemini_report import generate_overall_report
+    try:
+        feedback = generate_overall_report(gemini, performance_data)
+        return {"overallFeedback": feedback}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"code": "REPORT_FAILED", "message": str(exc)})
+
+
+
 @router.post("/{assessment_id}/grade", response_model=GradingResult)
 def grade_answer(request: Request, assessment_id: str, payload: GradeRequest):
     job = store(request).get(assessment_id)

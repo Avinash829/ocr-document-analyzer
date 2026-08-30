@@ -1,7 +1,7 @@
 export default function ProcessingPanel({ processing }) {
   return (
     <section 
-      className="flex h-full w-full flex-col items-center justify-center bg-white px-4 sm:bg-transparent" 
+      className="flex h-full w-full flex-col items-center justify-center px-4" 
       aria-live="polite"
     >
       <div className="flex flex-col items-center text-center">
