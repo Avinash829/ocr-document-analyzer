@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { gradeAnswer, generateReport } from "../lib/api";
 import ReportModal from "./ReportModal";
 
-export default function QuestionList({ questions, mappings, selectedId, onSelect, assessmentId, expandAll, onReset }) {
+export default function QuestionList({ questions, unmatchedAnswers, mappings, selectedId, onSelect, assessmentId, expandAll, onReset }) {
   const byQuestion = new Map(mappings.map((mapping) => [mapping.questionId, mapping]));
   const [grades, setGrades] = useState({});
   const [loadingGrades, setLoadingGrades] = useState({});
@@ -165,6 +165,47 @@ export default function QuestionList({ questions, mappings, selectedId, onSelect
           );
         })}
       </div>
+
+      {/* Unmatched Answers Section */}
+      {unmatchedAnswers?.length > 0 && (
+        <div className="mt-8">
+          <div className="mb-4 px-2">
+            <h3 className="text-[15px] font-bold text-slate-900">Unmatched Answers</h3>
+            <p className="text-[13px] text-slate-500 mt-0.5">Answers written by the student that could not be mapped to any question.</p>
+          </div>
+          <div className="space-y-3">
+            {unmatchedAnswers.map((answer, index) => {
+              const isSelected = selectedId === answer.id;
+              
+              return (
+                <div
+                  key={answer.id}
+                  onClick={() => handleSelect(answer.id)}
+                  role="button"
+                  tabIndex={0}
+                  className={`flex w-full flex-col p-4 sm:p-5 text-left cursor-pointer transition-all ${
+                    isSelected
+                      ? "rounded-2xl border-2 border-[#EA643A] bg-white shadow-md z-10 relative"
+                      : "rounded-2xl bg-white shadow-sm border border-slate-100 hover:shadow-md"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between mb-3">
+                    <div className="flex items-center justify-center h-8 w-8 rounded-full bg-slate-100 text-slate-400">
+                      <AlertCircle size={18} />
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-[13px] font-bold bg-[#FCECE8] text-[#EA643A]">
+                      UNMATCHED
+                    </span>
+                  </div>
+                  <p className={`text-[14px] sm:text-[15px] leading-relaxed transition-colors ${isSelected ? "text-slate-900" : "text-slate-700 line-clamp-2"}`}>
+                    {answer.text || "Handwritten content (no text extracted)"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       
       {/* View Final Report Button */}
       <div className="mt-8 mb-4 px-2">

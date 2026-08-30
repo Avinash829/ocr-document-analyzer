@@ -9,10 +9,17 @@ export default function ResultsWorkspace({ result, onReset }) {
   const [mobileTab, setMobileTab] = useState("Questions"); // "Questions" or "Answer Sheet"
   const [expandAll, setExpandAll] = useState(false);
 
-  const mapping = result.mappings.find((item) => item.questionId === selectedId);
-  const question = result.questions.find((item) => item.id === selectedId);
-  const answer = result.answers.find((item) => item.id === mapping?.answerId);
-  const regions = useMemo(() => mapping?.regions || [], [mapping]);
+  let mapping = result.mappings.find((item) => item.questionId === selectedId);
+  let question = result.questions.find((item) => item.id === selectedId);
+  let answer = result.answers.find((item) => item.id === mapping?.answerId);
+  let regions = mapping?.regions || [];
+
+  if (!question) {
+    answer = result.unmatchedAnswers?.find((item) => item.id === selectedId);
+    if (answer) {
+      regions = answer.regions || [];
+    }
+  }
 
   return (
     <section className="mx-auto flex h-full min-h-0 max-w-[1600px] flex-col p-4 lg:p-6">
@@ -54,7 +61,16 @@ export default function ResultsWorkspace({ result, onReset }) {
               {expandAll ? "Collapse All" : "Expand All"}
             </button>
           </div>
-          <QuestionList questions={result.questions} mappings={result.mappings} selectedId={selectedId} onSelect={setSelectedId} assessmentId={result.id} expandAll={expandAll} onReset={onReset} />
+          <QuestionList 
+            questions={result.questions} 
+            unmatchedAnswers={result.unmatchedAnswers || []}
+            mappings={result.mappings} 
+            selectedId={selectedId} 
+            onSelect={setSelectedId} 
+            assessmentId={result.id} 
+            expandAll={expandAll} 
+            onReset={onReset} 
+          />
         </div>
 
         {/* Answer Sheet Panel */}
